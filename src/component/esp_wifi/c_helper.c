@@ -2,18 +2,12 @@
 #include <string.h>
 
 #include "esp_err.h"
-#include "esp_event.h"
-#include "esp_netif.h"
 #include "esp_wifi.h"
-#include "esp_wifi_default.h"
 #include "nvs_flash.h"
 
 #include "c_helper.h"
 
 static bool s_runtime_initialized = false;
-static bool s_default_event_loop_created = false;
-static esp_netif_t *s_sta_netif = NULL;
-static esp_netif_t *s_ap_netif = NULL;
 
 static esp_err_t init_nvs_storage(void)
 {
@@ -72,41 +66,9 @@ int32_t espz_wifi_runtime_init(void)
         return err;
     }
 
-    err = esp_netif_init();
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        return err;
-    }
-
-    err = esp_event_loop_create_default();
-    if (err == ESP_OK) {
-        s_default_event_loop_created = true;
-    } else if (err != ESP_ERR_INVALID_STATE) {
-        return err;
-    }
-
-    s_sta_netif = esp_netif_create_default_wifi_sta();
-    if (s_sta_netif == NULL) {
-        return ESP_ERR_NO_MEM;
-    }
-
-    s_ap_netif = esp_netif_create_default_wifi_ap();
-    if (s_ap_netif == NULL) {
-        (void)esp_wifi_clear_default_wifi_driver_and_handlers(s_sta_netif);
-        esp_netif_destroy(s_sta_netif);
-        s_sta_netif = NULL;
-        return ESP_ERR_NO_MEM;
-    }
-
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     err = esp_wifi_init(&cfg);
     if (err != ESP_OK) {
-        (void)esp_wifi_clear_default_wifi_driver_and_handlers(s_ap_netif);
-        esp_netif_destroy(s_ap_netif);
-        s_ap_netif = NULL;
-
-        (void)esp_wifi_clear_default_wifi_driver_and_handlers(s_sta_netif);
-        esp_netif_destroy(s_sta_netif);
-        s_sta_netif = NULL;
         return err;
     }
 
@@ -125,26 +87,6 @@ int32_t espz_wifi_runtime_deinit(void)
     esp_err_t err = esp_wifi_deinit();
     if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_INIT) {
         return err;
-    }
-
-    if (s_ap_netif != NULL) {
-        (void)esp_wifi_clear_default_wifi_driver_and_handlers(s_ap_netif);
-        esp_netif_destroy(s_ap_netif);
-        s_ap_netif = NULL;
-    }
-
-    if (s_sta_netif != NULL) {
-        (void)esp_wifi_clear_default_wifi_driver_and_handlers(s_sta_netif);
-        esp_netif_destroy(s_sta_netif);
-        s_sta_netif = NULL;
-    }
-
-    if (s_default_event_loop_created) {
-        err = esp_event_loop_delete_default();
-        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-            return err;
-        }
-        s_default_event_loop_created = false;
     }
 
     s_runtime_initialized = false;
@@ -329,79 +271,6 @@ int32_t espz_wifi_scan(
     return err;
 }
 
-int32_t espz_wifi_set_hostname(const uint8_t *hostname, uint8_t hostname_len)
-{
-    if (ensure_runtime_initialized() != ESP_OK) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    if (s_sta_netif == NULL || hostname == NULL || hostname_len == 0 || hostname_len > 63) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    char host_buf[64] = {0};
-    memcpy(host_buf, hostname, hostname_len);
-    host_buf[hostname_len] = '\0';
-
-    return esp_netif_set_hostname(s_sta_netif, host_buf);
-}
-
-int32_t espz_wifi_use_dhcp_sta(void)
-{
-    if (ensure_runtime_initialized() != ESP_OK) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    if (s_sta_netif == NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    (void)esp_netif_dhcpc_stop(s_sta_netif);
-    return esp_netif_dhcpc_start(s_sta_netif);
-}
-
-int32_t espz_wifi_use_static_ip_sta(const espz_wifi_ip_config_t *cfg)
-{
-    if (ensure_runtime_initialized() != ESP_OK) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    if (s_sta_netif == NULL || cfg == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    (void)esp_netif_dhcpc_stop(s_sta_netif);
-
-    esp_netif_ip_info_t ip_info = {0};
-    esp_netif_set_ip4_addr(&ip_info.ip, cfg->ip[0], cfg->ip[1], cfg->ip[2], cfg->ip[3]);
-    esp_netif_set_ip4_addr(&ip_info.gw, cfg->gateway[0], cfg->gateway[1], cfg->gateway[2], cfg->gateway[3]);
-    esp_netif_set_ip4_addr(&ip_info.netmask, cfg->netmask[0], cfg->netmask[1], cfg->netmask[2], cfg->netmask[3]);
-
-    esp_err_t err = esp_netif_set_ip_info(s_sta_netif, &ip_info);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    if (cfg->has_dns1) {
-        esp_netif_dns_info_t dns = {0};
-        dns.ip.type = ESP_IPADDR_TYPE_V4;
-        esp_netif_set_ip4_addr(&dns.ip.u_addr.ip4, cfg->dns1[0], cfg->dns1[1], cfg->dns1[2], cfg->dns1[3]);
-        err = esp_netif_set_dns_info(s_sta_netif, ESP_NETIF_DNS_MAIN, &dns);
-        if (err != ESP_OK) {
-            return err;
-        }
-    }
-
-    if (cfg->has_dns2) {
-        esp_netif_dns_info_t dns = {0};
-        dns.ip.type = ESP_IPADDR_TYPE_V4;
-        esp_netif_set_ip4_addr(&dns.ip.u_addr.ip4, cfg->dns2[0], cfg->dns2[1], cfg->dns2[2], cfg->dns2[3]);
-        err = esp_netif_set_dns_info(s_sta_netif, ESP_NETIF_DNS_BACKUP, &dns);
-        if (err != ESP_OK) {
-            return err;
-        }
-    }
-
-    return ESP_OK;
-}
-
 int32_t espz_wifi_set_power_save(uint8_t ps)
 {
     if (ensure_runtime_initialized() != ESP_OK) {
@@ -530,33 +399,6 @@ int32_t espz_wifi_set_channel(uint8_t primary, uint8_t second)
         return ESP_ERR_INVALID_ARG;
     }
     return esp_wifi_set_channel(primary, second_chan);
-}
-
-int32_t espz_wifi_get_sta_ip(espz_wifi_ip_config_t *out)
-{
-    if (out == NULL || s_sta_netif == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    esp_netif_ip_info_t info = {0};
-    esp_err_t err = esp_netif_get_ip_info(s_sta_netif, &info);
-    if (err != ESP_OK) return err;
-
-    out->ip[0] = esp_ip4_addr1_16(&info.ip);
-    out->ip[1] = esp_ip4_addr2_16(&info.ip);
-    out->ip[2] = esp_ip4_addr3_16(&info.ip);
-    out->ip[3] = esp_ip4_addr4_16(&info.ip);
-    out->gateway[0] = esp_ip4_addr1_16(&info.gw);
-    out->gateway[1] = esp_ip4_addr2_16(&info.gw);
-    out->gateway[2] = esp_ip4_addr3_16(&info.gw);
-    out->gateway[3] = esp_ip4_addr4_16(&info.gw);
-    out->netmask[0] = esp_ip4_addr1_16(&info.netmask);
-    out->netmask[1] = esp_ip4_addr2_16(&info.netmask);
-    out->netmask[2] = esp_ip4_addr3_16(&info.netmask);
-    out->netmask[3] = esp_ip4_addr4_16(&info.netmask);
-    out->has_dns1 = false;
-    out->has_dns2 = false;
-    return ESP_OK;
 }
 
 int32_t espz_wifi_get_sta_mac(uint8_t out_mac[6])

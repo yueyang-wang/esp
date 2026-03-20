@@ -1,25 +1,13 @@
 const std = @import("std");
 const embed_build = @import("embed_zig");
 
-pub const RuntimeDefaults = struct {
-    idf_py: []const u8 = "idf.py",
-    chip: []const u8 = "esp32s3",
-    port: ?[]const u8 = null,
-    baud: u32 = 115200,
-    timeout: ?u32 = null,
-};
-
 pub const RuntimeOptions = struct {
-    idf_py: []const u8,
-    chip: []const u8,
     port: ?[]const u8,
-    baud: u32,
     timeout: ?u32 = null,
 };
 
 const ExternalRuntimeOptions = struct {
     esp_idf: ?[]const u8,
-    chip: []const u8 = "esp32s3",
     port: ?[]const u8,
     timeout: ?u32 = null,
 };
@@ -35,16 +23,6 @@ pub const AutoAppMainOptions = struct {
     output_file: []const u8 = "build/app_main.generated.c",
     delegate_symbol: []const u8,
 };
-
-pub fn runtimeOptionsFromBuild(b: *std.Build, defaults: RuntimeDefaults) RuntimeOptions {
-    return .{
-        .idf_py = b.option([]const u8, "idf_py", "Path to idf.py executable") orelse defaults.idf_py,
-        .chip = b.option([]const u8, "chip", "ESP chip target passed to idf.py set-target") orelse defaults.chip,
-        .port = b.option([]const u8, "port", "Serial port used by flash/monitor") orelse defaults.port,
-        .baud = b.option(u32, "baud", "Serial baud rate used by flash/monitor") orelse defaults.baud,
-        .timeout = b.option(u32, "timeout", "Auto-exit monitor after N seconds") orelse defaults.timeout,
-    };
-}
 
 fn externalRuntimeOptionsFromBuild(b: *std.Build) ExternalRuntimeOptions {
     const opt = b.option([]const u8, "esp_idf", "ESP-IDF root directory; defaults to ESP_IDF env var");
@@ -163,6 +141,7 @@ pub fn registerApp(b: *std.Build, app_name: []const u8, opts: RegisterAppOptions
     const extra_component_dirs = opts.extra_component_dirs;
 
     const board_profile_name = deriveBoardProfileName(build_config);
+    const chip = deriveChipFromBuildConfig(b, app_root, build_config);
     const sdkconfig_output_file = joinPath(b, build_dir, "sdkconfig.generated");
     const partition_file_name = b.fmt(
         "partitions.generated.{x}.csv",
@@ -173,8 +152,8 @@ pub fn registerApp(b: *std.Build, app_name: []const u8, opts: RegisterAppOptions
     const project_main_rel_dir = joinPath(b, project_rel_dir, "main");
     const zig_entry_library_rel_file = joinPath(b, project_main_rel_dir, "zig_entry.a");
     const zig_entry_library_name = "zig_entry.a";
-    const resolved_target = resolveChipTarget(b, external_runtime.chip);
-    const toolchain_sysroot = resolveToolchainSysroot(b, external_runtime.chip);
+    const resolved_target = resolveChipTarget(b, chip);
+    const toolchain_sysroot = resolveToolchainSysroot(b, chip);
     const build_options_root = createBuildOptionsRootSource(b, opts.build_options);
     const embed_dep = esp_dep.builder.dependency(
         "embed_zig",
@@ -221,7 +200,7 @@ pub fn registerApp(b: *std.Build, app_name: []const u8, opts: RegisterAppOptions
         app_entry,
         zig_entry_library_rel_file,
         opts.optimize,
-        external_runtime.chip,
+        chip,
         esp_dep,
         build_config,
         bsp_file,
@@ -255,10 +234,7 @@ pub fn registerApp(b: *std.Build, app_name: []const u8, opts: RegisterAppOptions
     app_main_step.dependOn(project_step);
 
     const runtime = RuntimeOptions{
-        .idf_py = if (external_runtime.esp_idf) |root| idfPyPath(b, root) else "idf.py",
-        .chip = external_runtime.chip,
         .port = external_runtime.port,
-        .baud = 0,
         .timeout = external_runtime.timeout,
     };
 
@@ -966,6 +942,7 @@ fn addIdfPyBaseCommandWithEnv(
     esp_idf: ?[]const u8,
     esp_root: ?std.Build.LazyPath,
 ) *std.Build.Step.Run {
+    _ = runtime;
     const cmd = if (esp_idf) |idf_root| blk: {
         const c = b.addSystemCommand(&.{"bash"});
         c.addFileArg(espPath(b, esp_root, "src/idf/build/idf_env_wrapper.sh"));
@@ -974,7 +951,7 @@ fn addIdfPyBaseCommandWithEnv(
         break :blk c;
     } else b.addSystemCommand(&.{"python3"});
     cmd.setCwd(b.path(app_dir));
-    cmd.addArg(runtime.idf_py);
+    cmd.addArg(idfPyExecutable(b, esp_idf));
     if (idf_build_dir) |build_dir| {
         cmd.addArgs(&.{ "-B", build_dir });
     }
@@ -1028,7 +1005,7 @@ fn addIdfPyMonitorCommandWithEnv(
         cmd.addArg(b.fmt("--timeout={d}", .{t}));
     }
     cmd.addArg("python3");
-    cmd.addArg(runtime.idf_py);
+    cmd.addArg(idfPyExecutable(b, esp_idf));
 
     if (idf_build_dir) |build_dir| {
         cmd.addArgs(&.{ "-B", build_dir });
@@ -1088,15 +1065,16 @@ fn addSerialArgs(cmd: *std.Build.Step.Run, runtime: RuntimeOptions) void {
     if (runtime.port) |port| {
         cmd.addArgs(&.{ "-p", port });
     }
-    if (runtime.baud != 0) {
-        cmd.addArgs(&.{ "-b", cmd.step.owner.fmt("{d}", .{runtime.baud}) });
-    }
 }
 
 fn addExternalSerialArgs(cmd: *std.Build.Step.Run, port: ?[]const u8) void {
     if (port) |value| {
         cmd.addArgs(&.{ "-p", value });
     }
+}
+
+fn idfPyExecutable(b: *std.Build, esp_idf: ?[]const u8) []const u8 {
+    return if (esp_idf) |root| idfPyPath(b, root) else "idf.py";
 }
 
 fn registerExternalDataPartitionFlashStep(
@@ -1272,6 +1250,30 @@ fn deriveBoardProfileName(board_file: []const u8) []const u8 {
         return base[0 .. base.len - 4];
     }
     return base;
+}
+
+fn deriveChipFromBuildConfig(b: *std.Build, app_root: []const u8, build_config_file: []const u8) []const u8 {
+    const rel_path = joinPath(b, app_root, build_config_file);
+    const path = b.pathFromRoot(rel_path);
+    const source = std.fs.cwd().readFileAlloc(b.allocator, path, 1024 * 1024) catch |err| {
+        std.debug.panic("failed to read build_config '{s}': {}", .{ path, err });
+    };
+
+    const board_anchor = std.mem.indexOf(u8, source, ".board = .{") orelse
+        std.mem.indexOf(u8, source, "board = .{") orelse
+        std.debug.panic("missing config.board in build_config '{s}'", .{path});
+    const board_body = source[board_anchor..];
+    const chip_anchor_rel = std.mem.indexOf(u8, board_body, ".chip") orelse
+        std.mem.indexOf(u8, board_body, "chip") orelse
+        std.debug.panic("missing config.board.chip in build_config '{s}'", .{path});
+    const chip_body = board_body[chip_anchor_rel..];
+    const quote_start = std.mem.indexOfScalar(u8, chip_body, '"') orelse
+        std.debug.panic("missing quoted chip value in build_config '{s}'", .{path});
+    const chip_value = chip_body[quote_start + 1 ..];
+    const quote_end = std.mem.indexOfScalar(u8, chip_value, '"') orelse
+        std.debug.panic("unterminated chip value in build_config '{s}'", .{path});
+
+    return chip_value[0..quote_end];
 }
 
 fn getEnvOrNull(b: *std.Build, name: []const u8) ?[]const u8 {

@@ -20,10 +20,10 @@
 推荐写法：
 
 ```bash
-cd examples/hello_world
+cd examples/lcd_battery
 zig build idf-build \
-  -Dbuild_config=board/esp32s3_devkit/build_config.zig \
-  -Dbsp=board/esp32s3_devkit/bsp.zig \
+  -Dbuild_config=board/esp32s3_szp/build_config.zig \
+  -Dbsp=board/esp32s3_szp/bsp.zig \
   -Desp_idf=/path/to/esp-idf
 ```
 
@@ -37,10 +37,10 @@ source "$ESP_IDF/export.sh"
 ## 快速开始
 
 ```bash
-cd examples/hello_world
+cd examples/lcd_battery
 zig build flash-monitor \
-  -Dbuild_config=board/esp32s3_devkit/build_config.zig \
-  -Dbsp=board/esp32s3_devkit/bsp.zig \
+  -Dbuild_config=board/esp32s3_szp/build_config.zig \
+  -Dbsp=board/esp32s3_szp/bsp.zig \
   -Dport=/dev/cu.usbmodem1301 \
   -Desp_idf="$ESP_IDF" \
   -Dtimeout=15
@@ -60,13 +60,11 @@ zig build flash-monitor \
 │   └── idf/                 # build、sdkconfig、partition 集成
 ├── test/
 │   ├── convention_checks.zig
-│   └── compile_test/
+│   └── runners/            # component/example 的扫描与执行逻辑
 └── examples/
-    ├── hello_world/
-    ├── wifi/
-    ├── bt_vhci_smoke/
     ├── aec_7210_8311/
-    └── ota_led/
+    ├── aec_7210_8311_loopback/
+    └── lcd_battery/
 ```
 
 ## 核心概念
@@ -80,15 +78,17 @@ zig build flash-monitor \
 - `sdkconfig.zig`：该组件自维护的配置面
 - `c_helper.c` / `c_helper.h`：可选的薄 C shim
 
-### 固件示例
+### 固件示例与测试
 
-示例位于 `examples/<app>/` 下，通常包含：
+面向用户的可运行示例位于 `examples/<app>/` 下，通常包含：
 
 - `build.zig`
 - `board/`
 - `src/main.zig`
 
-示例构建时必须同时传入 `-Dbuild_config=...` 和 `-Dbsp=...`。
+component 自己维护的测试 app 位于 `src/component/<module>/test/`，目录形态同样是 `build.zig` / `board/` / `src/main.zig`。
+
+无论是 example 还是 component test app，构建时都必须同时传入 `-Dbuild_config=...` 和 `-Dbsp=...`。
 
 ### 构建流程
 
@@ -105,21 +105,27 @@ zig build flash-monitor \
 ```bash
 zig build
 zig build test
+zig build component-compile
+zig build example-compile
 zig build -l
 ```
 
-构建单个示例：
+构建单个可运行示例：
 
 ```bash
-zig build hello_world \
-  -Dbuild_config=examples/hello_world/board/esp32s3_devkit/build_config.zig \
-  -Dbsp=examples/hello_world/board/esp32s3_devkit/bsp.zig
-zig build wifi_scan \
-  -Dbuild_config=examples/wifi/scan/board/esp32s3_devkit/build_config.zig \
-  -Dbsp=examples/wifi/scan/board/esp32s3_devkit/bsp.zig
-zig build bt_vhci_smoke \
-  -Dbuild_config=examples/bt_vhci_smoke/board/esp32s3_devkit/build_config.zig \
-  -Dbsp=examples/bt_vhci_smoke/board/esp32s3_devkit/bsp.zig
+cd examples/lcd_battery
+zig build build \
+  -Dbuild_config=board/esp32s3_szp/build_config.zig \
+  -Dbsp=board/esp32s3_szp/bsp.zig
+```
+
+构建单个 component 自带测试 app：
+
+```bash
+cd src/component/esp_system/test
+zig build build \
+  -Dbuild_config=board/compile/build_config.zig \
+  -Dbsp=board/compile/bsp.zig
 ```
 
 示例工作流命令：
@@ -140,7 +146,6 @@ zig build <app>-flash-monitor -Dbuild_config=<path> -Dbsp=<path> -Dport=/dev/cu.
 - `-Dbsp=<path>`：必填，板级 BSP 文件
 - `-Dbuild_dir=<dir>`：生成产物目录
 - `-Desp_idf=<path>`：ESP-IDF 根目录
-- `-Didf_py=<path>`：显式指定 `idf.py`
 - `-Dport=<serial>`：烧录和监视使用的串口
-- `-Dbaud=<rate>`：串口波特率
+- 串口监视波特率：从 `build_config` / 生成后的 sdkconfig 读取，不提供 `-D` 选项
 - `-Dtimeout=<seconds>`：串口监视在 N 秒后自动退出

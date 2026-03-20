@@ -1,21 +1,14 @@
 # Examples
 
-示例目录只保留示例本身；每个示例的构建、烧录、监控与运行结果都写在该示例自己的 `README.md` 中。
+示例目录只保留面向用户的 runnable demo；component 自己的 smoke test 和 compile/run test 已迁到 `src/component/<module>/test/`。
+
+每个示例的构建、烧录、监控与运行结果都写在该示例自己的 `README.md` 中。
 
 当前示例：
 
-- `hello_world/`：最小启动日志与运行期内存占用观测示例。
-- `link_attr/`：Zig 链接属性、段布局与内存地址演示。
-- `led_strip/`：WS2812 RGB LED 彩虹效果示例。
-- `bt_vhci_smoke/`：Bluetooth VHCI 传输接口的纯 Zig 用法示例。
-- `lcd_battery/`：SZP 板卡 LCD 电量条显示示例。
-- `ota_led/`：从数据分区切换红绿 LED 固件的 OTA 演示。
-- `esp_sr/`：ESP-SR AEC/NS/AGC 算法体积与内存基准示例。
 - `aec_7210_8311/`：ES7210+ES8311 音频回声消除（AEC+MASE+NS+AGC）演示。
 - `aec_7210_8311_loopback/`：ES7210+ES8311 实时 AEC 回环测试示例。
-- `wifi/scan/`：Wi-Fi STA 扫描与 AP 列表示例。
-- `wifi/sta/`：Wi-Fi STA 最小启动示例。
-- `wifi/ap/`：Wi-Fi SoftAP 最小启动示例。
+- `lcd_battery/`：SZP 板卡 LCD 电量条显示示例。
 
 说明：
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const esp_event = @import("../esp_event/event.zig");
 
 pub const EspError = i32;
 pub const esp_ok: EspError = 0;
@@ -18,6 +19,167 @@ pub const Error = error{
     NotFound,
     BufferTooSmall,
     EspIdfFailure,
+};
+
+pub const EventBase = esp_event.EventBase;
+pub const EventHandler = esp_event.EventHandler;
+
+pub const WifiEvent = enum(i32) {
+    scan_done = 1,
+    sta_connected = 4,
+    sta_disconnected = 5,
+    ap_start = 14,
+};
+
+pub const ScanType = enum(c_int) {
+    active = 0,
+    passive = 1,
+};
+
+pub const SecondChannel = enum(c_int) {
+    none = 0,
+    above = 1,
+    below = 2,
+};
+
+pub const AuthMode = enum(c_int) {
+    open = 0,
+    wep = 1,
+    wpa_psk = 2,
+    wpa2_psk = 3,
+    wpa_wpa2_psk = 4,
+    enterprise = 5,
+    wpa2_enterprise = 6,
+    wpa3_psk = 7,
+    wpa2_wpa3_psk = 8,
+    wapi_psk = 9,
+    owe = 10,
+    wpa3_ent_192 = 11,
+    wpa3_ext_psk = 12,
+    wpa3_ext_psk_mixed_mode = 13,
+    dpp = 14,
+};
+
+pub const CipherType = enum(c_int) {
+    none = 0,
+    wep40 = 1,
+    wep104 = 2,
+    tkip = 3,
+    ccmp = 4,
+    tkip_ccmp = 5,
+    aes_cmac128 = 6,
+    sms4 = 7,
+    gcmp = 8,
+    gcmp256 = 9,
+    aes_gmac128 = 10,
+    aes_gmac256 = 11,
+    unknown = 12,
+};
+
+pub const Antenna = enum(c_int) {
+    ant0 = 0,
+    ant1 = 1,
+    auto = 2,
+};
+
+pub const CountryPolicy = enum(c_int) {
+    auto = 0,
+    manual = 1,
+};
+
+pub const RawBandwidth = c_int;
+
+pub const ActiveScanTime = extern struct {
+    min: u32,
+    max: u32,
+};
+
+pub const ScanTime = extern struct {
+    active: ActiveScanTime,
+    passive: u32,
+};
+
+pub const ScanChannelBitmap = extern struct {
+    ghz_2_channels: u16,
+    ghz_5_channels: u32,
+};
+
+pub const RawScanConfig = extern struct {
+    ssid: ?[*]u8,
+    bssid: ?[*]u8,
+    channel: u8,
+    show_hidden: bool,
+    scan_type: ScanType,
+    scan_time: ScanTime,
+    home_chan_dwell_time: u8,
+    channel_bitmap: ScanChannelBitmap,
+};
+
+pub const Country = extern struct {
+    cc: [3]u8,
+    schan: u8,
+    nchan: u8,
+    max_tx_power: i8,
+    policy: CountryPolicy,
+};
+
+pub const HeApInfo = extern struct {
+    bss_color_info: u8,
+    bssid_index: u8,
+};
+
+pub const ApRecord = extern struct {
+    bssid: [6]u8,
+    ssid: [33]u8,
+    primary: u8,
+    second: SecondChannel,
+    rssi: i8,
+    authmode: AuthMode,
+    pairwise_cipher: CipherType,
+    group_cipher: CipherType,
+    ant: Antenna,
+    phy_flags: u32,
+    country: Country,
+    he_ap: HeApInfo,
+    bandwidth: RawBandwidth,
+    vht_ch_freq1: u8,
+    vht_ch_freq2: u8,
+};
+
+pub const StaScanDoneEvent = extern struct {
+    status: u32,
+    number: u8,
+    scan_id: u8,
+};
+
+pub const StaDisconnectedEvent = extern struct {
+    ssid: [32]u8,
+    ssid_len: u8,
+    bssid: [6]u8,
+    reason: u8,
+    rssi: i8,
+};
+
+pub const StaConnectedEvent = extern struct {
+    ssid: [32]u8,
+    ssid_len: u8,
+    bssid: [6]u8,
+    channel: u8,
+    authmode: AuthMode,
+    aid: u16,
+};
+
+pub const ApStaConnectedEvent = extern struct {
+    mac: [6]u8,
+    aid: u8,
+    is_mesh_child: bool,
+};
+
+pub const ApStaDisconnectedEvent = extern struct {
+    mac: [6]u8,
+    aid: u8,
+    is_mesh_child: bool,
+    reason: u16,
 };
 
 const CStaConfig = extern struct {
@@ -52,16 +214,6 @@ pub const CScanRecord = extern struct {
     authmode: u8,
 };
 
-const CIpConfig = extern struct {
-    ip: [4]u8,
-    gateway: [4]u8,
-    netmask: [4]u8,
-    has_dns1: bool,
-    dns1: [4]u8,
-    has_dns2: bool,
-    dns2: [4]u8,
-};
-
 extern fn espz_wifi_runtime_init() EspError;
 extern fn espz_wifi_runtime_deinit() EspError;
 
@@ -80,12 +232,6 @@ pub extern fn espz_wifi_scan(
     out_cap: u16,
     out_count: *u16,
 ) EspError;
-
-extern fn espz_wifi_set_hostname(hostname: [*]const u8, hostname_len: u8) EspError;
-extern fn espz_wifi_use_dhcp_sta() EspError;
-extern fn espz_wifi_use_static_ip_sta(cfg: *const CIpConfig) EspError;
-
-extern fn espz_wifi_get_sta_ip(out: *CIpConfig) EspError;
 extern fn espz_wifi_get_sta_mac(out: *[6]u8) EspError;
 
 extern fn espz_wifi_set_power_save(ps: u8) EspError;
@@ -95,6 +241,78 @@ extern fn espz_wifi_set_max_tx_power(quarter_dbm: i8) EspError;
 extern fn espz_wifi_set_protocol_mask(mode: u8, mask: u8) EspError;
 extern fn espz_wifi_set_bandwidth(mode: u8, bw: u8) EspError;
 extern fn espz_wifi_set_channel(primary: u8, second: u8) EspError;
+
+extern const WIFI_EVENT: EventBase;
+extern fn esp_wifi_scan_start(config: *const RawScanConfig, block: bool) EspError;
+extern fn esp_wifi_scan_get_ap_records(number: *u16, ap_records: [*]ApRecord) EspError;
+
+pub fn isWifiEventBase(event_base: EventBase) bool {
+    return event_base == WIFI_EVENT;
+}
+
+pub fn getWifiEventBase() EventBase {
+    return WIFI_EVENT;
+}
+
+pub const WifiEventRegistration = struct {
+    event: ?WifiEvent = null,
+    handler: EventHandler,
+    arg: ?*anyopaque = null,
+};
+
+pub const WifiEventHandler = struct {
+    pub fn any(_: WifiEventHandler, handler: EventHandler, arg: ?*anyopaque) WifiEventRegistration {
+        return .{
+            .event = null,
+            .handler = handler,
+            .arg = arg,
+        };
+    }
+
+    pub fn forEvent(_: WifiEventHandler, event: WifiEvent, handler: EventHandler, arg: ?*anyopaque) WifiEventRegistration {
+        return .{
+            .event = event,
+            .handler = handler,
+            .arg = arg,
+        };
+    }
+
+    pub fn register(self: WifiEventHandler, wifi: *WiFi, registration: WifiEventRegistration) Error!void {
+        _ = self;
+        try wifi.requireInitialized();
+        if (registration.event) |event| {
+            esp_event.registerDefault(WIFI_EVENT, @intFromEnum(event), registration.handler, registration.arg) catch |err| return mapEventError(err);
+            return;
+        }
+        esp_event.registerDefaultAny(WIFI_EVENT, registration.handler, registration.arg) catch |err| return mapEventError(err);
+    }
+
+    pub fn unregister(self: WifiEventHandler, wifi: *WiFi, registration: WifiEventRegistration) Error!void {
+        _ = self;
+        try wifi.requireInitialized();
+        if (registration.event) |event| {
+            esp_event.unregisterDefault(WIFI_EVENT, @intFromEnum(event), registration.handler) catch |err| return mapEventError(err);
+            return;
+        }
+        esp_event.unregisterDefaultAny(WIFI_EVENT, registration.handler) catch |err| return mapEventError(err);
+    }
+
+    pub fn registerAny(self: WifiEventHandler, wifi: *WiFi, handler: EventHandler, arg: ?*anyopaque) Error!void {
+        try self.register(wifi, self.any(handler, arg));
+    }
+
+    pub fn unregisterAny(self: WifiEventHandler, wifi: *WiFi, handler: EventHandler) Error!void {
+        try self.unregister(wifi, self.any(handler, null));
+    }
+
+    pub fn registerEvent(self: WifiEventHandler, wifi: *WiFi, event: WifiEvent, handler: EventHandler, arg: ?*anyopaque) Error!void {
+        try self.register(wifi, self.forEvent(event, handler, arg));
+    }
+
+    pub fn unregisterEvent(self: WifiEventHandler, wifi: *WiFi, event: WifiEvent, handler: EventHandler) Error!void {
+        try self.unregister(wifi, self.forEvent(event, handler, null));
+    }
+};
 
 pub const WiFi = struct {
     pub const Mode = enum(u8) {
@@ -142,14 +360,7 @@ pub const WiFi = struct {
         authmode: u8,
     };
 
-    pub const IpConfig = struct {
-        ip: [4]u8,
-        gateway: [4]u8,
-        netmask: [4]u8,
-        dns1: ?[4]u8 = null,
-        dns2: ?[4]u8 = null,
-    };
-
+    event_handler: WifiEventHandler = .{},
     initialized: bool = false,
     started: bool = false,
     mode: ?Mode = null,
@@ -279,17 +490,26 @@ pub const WiFi = struct {
         return records;
     }
 
-    pub fn getStaIp(self: *WiFi) Error!IpConfig {
+    pub fn startRawScan(self: *WiFi, cfg: *const RawScanConfig, block: bool) Error!void {
         try self.requireInitialized();
-        var c_cfg: CIpConfig = undefined;
-        try check(espz_wifi_get_sta_ip(&c_cfg));
-        return .{
-            .ip = c_cfg.ip,
-            .gateway = c_cfg.gateway,
-            .netmask = c_cfg.netmask,
-            .dns1 = if (c_cfg.has_dns1) c_cfg.dns1 else null,
-            .dns2 = if (c_cfg.has_dns2) c_cfg.dns2 else null,
-        };
+        try check(esp_wifi_scan_start(cfg, block));
+    }
+
+    pub fn startAsyncScan(self: *WiFi, cfg: ScanConfig) Error!void {
+        try self.requireInitialized();
+        var raw = std.mem.zeroes(RawScanConfig);
+        raw.channel = cfg.channel;
+        raw.show_hidden = cfg.show_hidden;
+        raw.scan_type = .active;
+        try self.startRawScan(&raw, false);
+    }
+
+    pub fn getApRecordsInto(self: *WiFi, records: []ApRecord) Error![]ApRecord {
+        try self.requireInitialized();
+        if (records.len == 0) return error.InvalidArgument;
+        var count: u16 = @intCast(records.len);
+        try check(esp_wifi_scan_get_ap_records(&count, records.ptr));
+        return records[0..count];
     }
 
     pub fn getStaMac(self: *WiFi) Error![6]u8 {
@@ -297,34 +517,6 @@ pub const WiFi = struct {
         var mac: [6]u8 = undefined;
         try check(espz_wifi_get_sta_mac(&mac));
         return mac;
-    }
-
-    pub fn setHostname(self: *WiFi, hostname: []const u8) Error!void {
-        try self.requireInitialized();
-        try validateHostname(hostname);
-        try check(espz_wifi_set_hostname(hostname.ptr, @intCast(hostname.len)));
-    }
-
-    pub fn useDhcpSta(self: *WiFi) Error!void {
-        try self.requireInitialized();
-        try check(espz_wifi_use_dhcp_sta());
-    }
-
-    pub fn useStaticIpSta(self: *WiFi, cfg: IpConfig) Error!void {
-        try self.requireInitialized();
-
-        const zero4 = [_]u8{ 0, 0, 0, 0 };
-        const c_cfg: CIpConfig = .{
-            .ip = cfg.ip,
-            .gateway = cfg.gateway,
-            .netmask = cfg.netmask,
-            .has_dns1 = cfg.dns1 != null,
-            .dns1 = cfg.dns1 orelse zero4,
-            .has_dns2 = cfg.dns2 != null,
-            .dns2 = cfg.dns2 orelse zero4,
-        };
-
-        try check(espz_wifi_use_static_ip_sta(&c_cfg));
     }
 
     pub fn setPowerSave(self: *WiFi, ps: PowerSave) Error!void {
@@ -380,6 +572,16 @@ fn check(result: EspError) Error!void {
     }
 }
 
+fn mapEventError(err: esp_event.Error) Error {
+    return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.InvalidArgument => error.InvalidArgument,
+        error.InvalidState => error.InvalidState,
+        error.NotFound => error.NotFound,
+        error.EspIdfFailure => error.EspIdfFailure,
+    };
+}
+
 fn validateStaConfig(cfg: WiFi.StaConfig) Error!void {
     if (cfg.ssid.len == 0 or cfg.ssid.len > 32) return error.InvalidArgument;
     if (cfg.password.len > 64) return error.InvalidArgument;
@@ -392,11 +594,6 @@ fn validateApConfig(cfg: WiFi.ApConfig) Error!void {
     if (cfg.password.len > 0 and cfg.password.len < 8) return error.InvalidArgument;
     if (cfg.channel > 14) return error.InvalidArgument;
     if (cfg.max_connection == 0) return error.InvalidArgument;
-}
-
-fn validateHostname(hostname: []const u8) Error!void {
-    if (hostname.len == 0 or hostname.len > 63) return error.InvalidArgument;
-    if (std.mem.indexOfScalar(u8, hostname, 0) != null) return error.InvalidArgument;
 }
 
 test "check maps common esp-idf error codes" {
@@ -420,12 +617,4 @@ test "validateApConfig enforces range and password policy" {
     try std.testing.expectError(error.InvalidArgument, validateApConfig(.{ .ssid = "espz-ap", .password = "short", .channel = 6, .max_connection = 4 }));
     try std.testing.expectError(error.InvalidArgument, validateApConfig(.{ .ssid = "espz-ap", .password = "", .channel = 15, .max_connection = 4 }));
     try std.testing.expectError(error.InvalidArgument, validateApConfig(.{ .ssid = "espz-ap", .password = "", .channel = 6, .max_connection = 0 }));
-}
-
-test "validateHostname enforces length and nul-free" {
-    try validateHostname("espz-device");
-    try std.testing.expectError(error.InvalidArgument, validateHostname(""));
-
-    const with_nul = [_]u8{ 'a', 0, 'b' };
-    try std.testing.expectError(error.InvalidArgument, validateHostname(&with_nul));
 }

@@ -1,5 +1,0 @@
-build/
-.zig-cache/
-firmware/*.bin
-third_party/*/vendor/
-third_party/third_party

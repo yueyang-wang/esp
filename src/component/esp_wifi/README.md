@@ -25,7 +25,7 @@
 - 生命周期：`init` / `deinit` / `start` / `stop`
 - STA/AP：`startSta` / `configureSta` / `connectSta` / `disconnectSta` / `startAp` / `configureAp`
 - 扫描：`scan`
-- 网络参数：`setHostname` / `useDhcpSta` / `useStaticIpSta`
+- 事件与低层辅助：`registerAnyWifiEventHandler` / `registerWifiEventHandler` / `startAsyncScan` / `getApRecordsInto`
 - 功耗与链路：`setPowerSave` / `getPowerSave` / `setMaxTxPower`
 - PHY 参数：`setProtocolMask` / `setBandwidth` / `setChannel`
 
@@ -34,7 +34,8 @@
 - `wifi.zig`：
   - 统一对外 API；
   - 输入校验与错误映射（`esp_err_t` -> Zig error）；
-  - 资源状态跟踪（initialized/started/mode）。
+  - 资源状态跟踪（initialized/started/mode）；
+  - 仅暴露 `esp_wifi` 本体能力，不混入 `esp_netif` 的 IP/DHCP 事件与配置。
 - `c_helper.c/.h`：
   - 负责调用 ESP-IDF 原生 API；
   - 处理 `wifi_config_t` 等复杂字段写入；

@@ -2,4 +2,9 @@ openteam/
 .DS_Store
 .zig-cache/
 zig-out/
+src/component/*/test/build/
+src/component/*/test/build.*/
+src/component/*/test/.cache/
+src/component/*/test/.zig-cache/
+src/component/*/test/zig-out/
 

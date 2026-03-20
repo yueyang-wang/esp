@@ -20,10 +20,10 @@ Zig-first ESP-IDF bindings for writing ESP32 firmware in pure Zig.
 Recommended:
 
 ```bash
-cd examples/hello_world
+cd examples/lcd_battery
 zig build idf-build \
-  -Dbuild_config=board/esp32s3_devkit/build_config.zig \
-  -Dbsp=board/esp32s3_devkit/bsp.zig \
+  -Dbuild_config=board/esp32s3_szp/build_config.zig \
+  -Dbsp=board/esp32s3_szp/bsp.zig \
   -Desp_idf=/path/to/esp-idf
 ```
 
@@ -37,10 +37,10 @@ source "$ESP_IDF/export.sh"
 ## Quick start
 
 ```bash
-cd examples/hello_world
+cd examples/lcd_battery
 zig build flash-monitor \
-  -Dbuild_config=board/esp32s3_devkit/build_config.zig \
-  -Dbsp=board/esp32s3_devkit/bsp.zig \
+  -Dbuild_config=board/esp32s3_szp/build_config.zig \
+  -Dbsp=board/esp32s3_szp/bsp.zig \
   -Dport=/dev/cu.usbmodem1301 \
   -Desp_idf="$ESP_IDF" \
   -Dtimeout=15
@@ -60,13 +60,11 @@ zig build flash-monitor \
 │   └── idf/                 # build, sdkconfig, partition integration
 ├── test/
 │   ├── convention_checks.zig
-│   └── compile_test/
+│   └── runners/            # component/example discovery and execution
 └── examples/
-    ├── hello_world/
-    ├── wifi/
-    ├── bt_vhci_smoke/
     ├── aec_7210_8311/
-    └── ota_led/
+    ├── aec_7210_8311_loopback/
+    └── lcd_battery/
 ```
 
 ## Core concepts
@@ -80,15 +78,17 @@ Each directory under `src/component/` maps to one ESP-IDF component.
 - `sdkconfig.zig`: owned config surface
 - `c_helper.c` / `c_helper.h`: optional thin C shims
 
-### Firmware examples
+### Firmware examples and tests
 
-Examples live under `examples/<app>/` and usually contain:
+Runnable demos live under `examples/<app>/` and usually contain:
 
 - `build.zig`
 - `board/`
 - `src/main.zig`
 
-Examples require both `-Dbuild_config=...` and `-Dbsp=...`.
+Component-owned test apps live under `src/component/<module>/test/` with the same `build.zig` / `board/` / `src/main.zig` shape.
+
+Both examples and component test apps require `-Dbuild_config=...` and `-Dbsp=...`.
 
 ### Build flow
 
@@ -105,21 +105,27 @@ Examples require both `-Dbuild_config=...` and `-Dbsp=...`.
 ```bash
 zig build
 zig build test
+zig build component-compile
+zig build example-compile
 zig build -l
 ```
 
-Build one example:
+Build one runnable example:
 
 ```bash
-zig build hello_world \
-  -Dbuild_config=examples/hello_world/board/esp32s3_devkit/build_config.zig \
-  -Dbsp=examples/hello_world/board/esp32s3_devkit/bsp.zig
-zig build wifi_scan \
-  -Dbuild_config=examples/wifi/scan/board/esp32s3_devkit/build_config.zig \
-  -Dbsp=examples/wifi/scan/board/esp32s3_devkit/bsp.zig
-zig build bt_vhci_smoke \
-  -Dbuild_config=examples/bt_vhci_smoke/board/esp32s3_devkit/build_config.zig \
-  -Dbsp=examples/bt_vhci_smoke/board/esp32s3_devkit/bsp.zig
+cd examples/lcd_battery
+zig build build \
+  -Dbuild_config=board/esp32s3_szp/build_config.zig \
+  -Dbsp=board/esp32s3_szp/bsp.zig
+```
+
+Build one component-owned test app:
+
+```bash
+cd src/component/esp_system/test
+zig build build \
+  -Dbuild_config=board/compile/build_config.zig \
+  -Dbsp=board/compile/bsp.zig
 ```
 
 Example workflow commands:
@@ -140,7 +146,6 @@ Common options:
 - `-Dbsp=<path>`: required board BSP file
 - `-Dbuild_dir=<dir>`: generated build output directory
 - `-Desp_idf=<path>`: ESP-IDF root
-- `-Didf_py=<path>`: explicit `idf.py`
 - `-Dport=<serial>`: serial port for flash and monitor
-- `-Dbaud=<rate>`: serial baud rate
+- monitor baud: read from `build_config` / generated sdkconfig, not from a `-D` option
 - `-Dtimeout=<seconds>`: auto-exit monitor after N seconds

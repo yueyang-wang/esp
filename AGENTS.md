@@ -20,7 +20,8 @@ Agent guide for ESPZ.
   - `src/esp_mod.zig`
   - `src/idf/cmake/component.zig`
   - `src/idf/sdkconfig/component.zig`
-- Example apps live in `examples/<app>/`.
+- Runnable examples live in `examples/<app>/`.
+- Component-owned test apps live in `src/component/<module>/test/`.
 
 ## Environment and commands
 
@@ -30,7 +31,11 @@ Use the Xtensa-capable Zig fork from
 Recommended build style:
 
 ```bash
-zig build hello_world-idf-build -Desp_idf=/path/to/esp-idf
+cd examples/lcd_battery
+zig build idf-build \
+  -Dbuild_config=board/esp32s3_szp/build_config.zig \
+  -Dbsp=board/esp32s3_szp/bsp.zig \
+  -Desp_idf=/path/to/esp-idf
 ```
 
 Manual environment is also fine:
@@ -45,10 +50,9 @@ Useful commands:
 ```bash
 zig build
 zig build test
+zig build component-compile -Desp_idf=/path/to/esp-idf
+zig build example-compile -Desp_idf=/path/to/esp-idf
 zig build -l
-zig build hello_world
-zig build wifi_scan
-zig build bt_vhci_smoke
 ```
 
 Common workflow:
@@ -67,9 +71,7 @@ Common options:
 - `-Dbsp=<path>`
 - `-Dbuild_dir=<dir>`
 - `-Desp_idf=<path>`
-- `-Didf_py=<path>`
 - `-Dport=<serial>`
-- `-Dbaud=<rate>`
 - `-Dtimeout=<seconds>`
 
 ## Code conventions
@@ -127,24 +129,68 @@ Registration steps:
 1. Add the module to `src/idf/cmake/component.zig`.
 2. Re-export it from `src/esp_mod.zig`.
 3. Re-export its sdkconfig surface from `src/idf/sdkconfig/component.zig`.
-4. If it is a runtime module, add a compile test under `test/compile_test/<module>/`.
+4. If it is a runtime module, add a component-owned test app under `src/component/<module>/test/`.
 
-Compile-test layout:
+Component test layout:
 
 ```text
-test/compile_test/<module>/
-├── .gitignore
+src/component/<module>/test/
 ├── build.zig
 ├── build.zig.zon
-├── board/esp32s3.zig
+├── board/
+│   ├── compile/
+│   │   ├── build_config.zig
+│   │   └── bsp.zig
+│   └── <real_board>/
+│       ├── build_config.zig
+│       └── bsp.zig
 └── src/main.zig
 ```
 
-Run compile tests with:
+Run component compile tests with:
 
 ```bash
 zig build test -Desp_idf=/path/to/esp-idf
+zig build component-compile -Desp_idf=/path/to/esp-idf
 ```
+
+## Writing a Component Test
+
+Use `src/component/<module>/test/` for component-owned smoke tests, compile tests, and optional run tests.
+
+Recommended structure:
+
+```text
+src/component/<module>/test/
+├── build.zig
+├── build.zig.zon
+├── board/
+│   ├── compile/
+│   │   ├── build_config.zig
+│   │   ├── bsp.zig
+│   │   └── golden/
+│   │       ├── size.txt
+│   │       ├── symbols.txt
+│   │       └── sections.txt
+│   └── <real_board>/
+│       ├── build_config.zig
+│       └── bsp.zig
+└── src/main.zig
+```
+
+Guidelines:
+
+- Keep exactly one test app per component under `src/component/<module>/test/`.
+- Use `esp.idf.build.registerApp(...)` in `build.zig`.
+- Set the `esp` dependency path in `build.zig.zon` relative to the test directory.
+- Always provide `board/compile/build_config.zig` and `board/compile/bsp.zig`.
+- Add a real board profile only when hardware validation is needed.
+- Keep each `build_config.zig` in the board directory that owns it; do not share test build configs through a central helper file.
+- Put board-specific runtime exports such as `pins` in `bsp.zig`.
+- Prefer direct `esp.component.*` APIs in `src/main.zig`; do not build component tests on top of `src/hal/` or `src/runtime/`.
+- Keep the test focused on the component under test plus minimal supporting `esp.component.*` dependencies.
+- Use `board/compile/golden/` for normalized compile artifacts such as size, symbols, and sections; do not default to raw ELF snapshots.
+- Keep user-facing runnable demos in `examples/`; when an app is primarily a component test, move it into the component's `test/` directory instead.
 
 ## Writing an example
 
@@ -161,17 +207,18 @@ examples/<app>/
 Guidelines:
 
 - Use `esp.idf.build.registerApp(...)` in `build.zig`.
-- Prefer `-Dbuild_config` and optional `-Dbsp`; `-Dboard` is deprecated compatibility only.
+- Prefer `-Dbuild_config` and `-Dbsp`; `-Dboard` is deprecated compatibility only.
 - Keep board-specific data in `board/`, not in firmware logic.
 - Entry point is `export fn zig_esp_main() callconv(.c) void`.
 - If you need an ESP-IDF C API, add a shim in the owning component instead of using raw FFI in the app.
+- Keep `examples/` for user-facing runnable demos; move component smoke tests into `src/component/<module>/test/`.
 
 ## Change checklist
 
 1. Run `zig fmt` on touched Zig files.
 2. Run `zig build`.
 3. Run `zig build test`.
-4. If you changed a runtime component, make sure its compile test exists and still builds.
+4. If you changed a runtime component, make sure its `src/component/<module>/test/` app exists and still builds.
 5. If you changed workflow wiring, build at least one example end-to-end.
 6. If you changed runtime behavior, flash to hardware and verify it.
 7. If you touched a component, update its `README.md`.

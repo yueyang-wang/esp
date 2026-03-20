@@ -11,7 +11,8 @@
     },
     .dependencies = .{
         .embed_zig = .{
-            .path = "../embed-zig-ag1",
+            .url = "https://codeload.github.com/embed-zig/embed-zig/tar.gz/ef54795bc54a26dd08317120480201afeeb0a054",
+            .hash = "embed_zig-0.1.0-EGFcOczqKABUga3bHiqDzEnImRzSQOhGuP-H6vXYD83y",
         },
     },
 }

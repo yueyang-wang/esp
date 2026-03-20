@@ -1,7 +1,65 @@
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
+#include "esp_event.h"
 #include "esp_netif.h"
+#include "esp_wifi_default.h"
+
+int32_t espz_netif_runtime_init(void)
+{
+    esp_err_t err = esp_netif_init();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        return (int32_t)err;
+    }
+
+    err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        return (int32_t)err;
+    }
+
+    return ESP_OK;
+}
+
+int32_t espz_netif_runtime_deinit(void)
+{
+    esp_err_t err = esp_event_loop_delete_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        return (int32_t)err;
+    }
+
+    err = esp_netif_deinit();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        return (int32_t)err;
+    }
+
+    return ESP_OK;
+}
+
+esp_netif_t *espz_netif_create_default_wifi_sta(void)
+{
+    return esp_netif_create_default_wifi_sta();
+}
+
+esp_netif_t *espz_netif_create_default_wifi_ap(void)
+{
+    return esp_netif_create_default_wifi_ap();
+}
+
+int32_t espz_netif_destroy_default_wifi(void *netif)
+{
+    if (netif == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t err = esp_wifi_clear_default_wifi_driver_and_handlers(netif);
+    if (err != ESP_OK) {
+        return (int32_t)err;
+    }
+
+    esp_netif_destroy((esp_netif_t *)netif);
+    return ESP_OK;
+}
 
 esp_netif_t *espz_netif_get_handle_from_ifkey(const char *if_key)
 {
@@ -60,4 +118,26 @@ int32_t espz_netif_dhcpc_get_status(esp_netif_t *netif, uint32_t *status)
     if (err != ESP_OK) return (int32_t)err;
     *status = (uint32_t)s;
     return 0;
+}
+
+int32_t espz_netif_dhcpc_start(esp_netif_t *netif)
+{
+    return (int32_t)esp_netif_dhcpc_start(netif);
+}
+
+int32_t espz_netif_dhcpc_stop(esp_netif_t *netif)
+{
+    return (int32_t)esp_netif_dhcpc_stop(netif);
+}
+
+int32_t espz_netif_set_hostname(esp_netif_t *netif, const uint8_t *hostname, uint8_t hostname_len)
+{
+    if (netif == NULL || hostname == NULL || hostname_len == 0 || hostname_len > 63) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char host_buf[64] = {0};
+    memcpy(host_buf, hostname, hostname_len);
+    host_buf[hostname_len] = '\0';
+    return (int32_t)esp_netif_set_hostname(netif, host_buf);
 }

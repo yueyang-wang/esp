@@ -1,0 +1,17 @@
+.{
+    .name = .esp_adc_test,
+    .version = "0.1.0",
+    .fingerprint = 0x59e6ae9795b4493e,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .esp = .{
+            .path = "../../../../",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "board",
+    },
+}

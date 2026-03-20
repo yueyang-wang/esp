@@ -1,0 +1,17 @@
+.{
+    .name = .bt_test,
+    .version = "0.1.0",
+    .fingerprint = 0x528e346f351a5f3a,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .esp = .{
+            .path = "../../../../",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "board",
+    },
+}

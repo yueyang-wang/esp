@@ -35,16 +35,6 @@ typedef struct espz_wifi_scan_record {
     uint8_t authmode;
 } espz_wifi_scan_record_t;
 
-typedef struct espz_wifi_ip_config {
-    uint8_t ip[4];
-    uint8_t gateway[4];
-    uint8_t netmask[4];
-    bool has_dns1;
-    uint8_t dns1[4];
-    bool has_dns2;
-    uint8_t dns2[4];
-} espz_wifi_ip_config_t;
-
 int32_t espz_wifi_runtime_init(void);
 int32_t espz_wifi_runtime_deinit(void);
 
@@ -62,12 +52,6 @@ int32_t espz_wifi_scan(
     espz_wifi_scan_record_t *out_records,
     uint16_t out_cap,
     uint16_t *out_count);
-
-int32_t espz_wifi_set_hostname(const uint8_t *hostname, uint8_t hostname_len);
-int32_t espz_wifi_use_dhcp_sta(void);
-int32_t espz_wifi_use_static_ip_sta(const espz_wifi_ip_config_t *cfg);
-
-int32_t espz_wifi_get_sta_ip(espz_wifi_ip_config_t *out);
 int32_t espz_wifi_get_sta_mac(uint8_t out_mac[6]);
 
 int32_t espz_wifi_set_power_save(uint8_t ps);

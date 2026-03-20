@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: esp
+    env:
+      ESP_IDF: ${{ github.workspace }}/esp-idf
+      ZIG_VERSION: 0.15.2
+      EMBED_ZIG_REF: ef54795bc54a26dd08317120480201afeeb0a054
+      ESP_IDF_REF: 67c1de1eebe095d554d281952fde63c16ee2dca0
+    steps:
+      - name: Checkout esp
+        uses: actions/checkout@v4
+        with:
+          path: esp
+
+      - name: Checkout embed-zig dependency
+        uses: actions/checkout@v4
+        with:
+          repository: embed-zig/embed-zig
+          ref: ef54795bc54a26dd08317120480201afeeb0a054
+          path: embed-zig
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bash \
+            bison \
+            build-essential \
+            ccache \
+            cmake \
+            curl \
+            dfu-util \
+            flex \
+            gawk \
+            git \
+            gperf \
+            libffi-dev \
+            libncurses-dev \
+            libssl-dev \
+            libusb-1.0-0 \
+            ninja-build \
+            python3 \
+            python3-pip \
+            python3-venv \
+            wget \
+            xz-utils
+
+      - name: Setup Xtensa Zig
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+
+          case "$(uname -m)" in
+            x86_64) zig_target="x86_64-linux-gnu" ;;
+            aarch64) zig_target="aarch64-linux-gnu" ;;
+            *) echo "unsupported runner architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+
+          archive="zig-${ZIG_VERSION}-${zig_target}-baseline.tar.xz"
+          url="https://github.com/embed-zig/esp-zig-bootstrap/releases/download/v${ZIG_VERSION}/${archive}"
+
+          curl -L --fail --retry 3 "$url" -o "$RUNNER_TEMP/$archive"
+          mkdir -p "$HOME/.local/opt"
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$HOME/.local/opt"
+          echo "$HOME/.local/opt/zig-${ZIG_VERSION}-${zig_target}-baseline/bin" >> "$GITHUB_PATH"
+
+      - name: Setup ESP-IDF
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+
+          git clone --filter=blob:none https://github.com/espressif/esp-idf.git "$ESP_IDF"
+          git -C "$ESP_IDF" checkout "$ESP_IDF_REF"
+
+          python3 "$ESP_IDF/tools/idf_tools.py" --non-interactive install required --targets=esp32s3
+          python3 "$ESP_IDF/tools/idf_tools.py" --non-interactive install-python-env
+
+      - name: Run repo tests
+        run: |
+          set -euo pipefail
+
+          . "$ESP_IDF/export.sh"
+          zig version
+          zig build test -Desp_idf="$ESP_IDF"

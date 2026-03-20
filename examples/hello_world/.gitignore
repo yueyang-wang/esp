@@ -1,4 +1,0 @@
-build/
-.zig-cache/
-zig-out/
-.cache/

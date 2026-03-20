@@ -62,6 +62,12 @@ fn joinPath(buf: []u8, a: []const u8, b: []const u8) []const u8 {
     return std.fmt.bufPrint(buf, "{s}/{s}", .{ a, b }) catch @panic("path buffer overflow");
 }
 
+fn isRetainedExample(name: []const u8) bool {
+    return std.mem.eql(u8, name, "aec_7210_8311") or
+        std.mem.eql(u8, name, "aec_7210_8311_loopback") or
+        std.mem.eql(u8, name, "lcd_battery");
+}
+
 // ── Example app discovery ──
 // Walks examples/ two levels deep, returning paths relative to examples/.
 // An "app" is any directory containing build.zig.
@@ -75,6 +81,7 @@ fn discoverExampleApps(allocator: std.mem.Allocator) ![]const []const u8 {
     var iter = examples.iterate();
     while (try iter.next()) |entry| {
         if (entry.kind != .directory) continue;
+        if (!isRetainedExample(entry.name)) continue;
 
         var buf: [512]u8 = undefined;
         const build_path = joinPath(&buf, entry.name, "build.zig");
@@ -106,6 +113,8 @@ fn discoverExampleApps(allocator: std.mem.Allocator) ![]const []const u8 {
 //   2. esp_mod.zig
 //   3. idf_mod.zig
 //   4. README.md
+// Component-owned test apps are optional during migration, but if present they
+// must follow src/component/<module>/test/ conventions.
 
 test "component modules: required directory structure" {
     var src = try std.fs.cwd().openDir("src/component", .{ .iterate = true });
@@ -130,14 +139,25 @@ test "component modules: required directory structure" {
             }
         }
 
-        var esp_mod_buf: [512]u8 = undefined;
-        const esp_mod_path = joinPath(&esp_mod_buf, entry.name, "esp_mod.zig");
-        if (fileIsNonEmpty(src, esp_mod_path)) {
-            var ct_buf: [512]u8 = undefined;
-            const ct_build = std.fmt.bufPrint(&ct_buf, "test/compile_test/{s}/build.zig", .{entry.name}) catch continue;
-            if (!fileExistsIn(std.fs.cwd(), ct_build)) {
-                std.debug.print("  MISSING: test/compile_test/{s}/ (non-empty esp_mod.zig requires compile_test)\n", .{entry.name});
-                fail_count += 1;
+        var test_dir_buf: [512]u8 = undefined;
+        const test_dir = joinPath(&test_dir_buf, entry.name, "test");
+        var test_build_buf: [512]u8 = undefined;
+        const test_build = joinPath(&test_build_buf, test_dir, "build.zig");
+        if (fileExistsIn(src, test_build)) {
+            const required_test_files = [_][]const u8{
+                "build.zig",
+                "build.zig.zon",
+                "src/main.zig",
+                "board/compile/build_config.zig",
+                "board/compile/bsp.zig",
+            };
+            for (required_test_files) |file| {
+                var pbuf: [512]u8 = undefined;
+                const p = joinPath(&pbuf, test_dir, file);
+                if (!fileExistsIn(src, p)) {
+                    std.debug.print("  MISSING: src/component/{s}/test/{s}\n", .{ entry.name, file });
+                    fail_count += 1;
+                }
             }
         }
     }
@@ -309,101 +329,6 @@ test "examples: no app has main/main.c" {
     }
     if (fail_count > 0) {
         std.debug.print("{d} example(s) have hand-written main/main.c\n", .{fail_count});
-        return error.TestUnexpectedResult;
-    }
-}
-
-// ── test/compile_test/ build verification ──
-// Runs real `zig build build` for every module compile test under test/compile_test/.
-// Requires -Desp_idf=<path>; skipped when not provided.
-
-fn discoverModuleTestDirs(allocator: std.mem.Allocator) ![]const []const u8 {
-    var list: std.ArrayList([]const u8) = .empty;
-    var compile_tests = std.fs.cwd().openDir("test/compile_test", .{ .iterate = true }) catch
-        return try list.toOwnedSlice(allocator);
-    defer compile_tests.close();
-
-    var iter = compile_tests.iterate();
-    while (try iter.next()) |entry| {
-        if (entry.kind != .directory) continue;
-        var buf: [512]u8 = undefined;
-        const test_build = joinPath(&buf, entry.name, "build.zig");
-        if (fileExistsIn(compile_tests, test_build)) {
-            try list.append(allocator, try allocator.dupe(u8, entry.name));
-        }
-    }
-    return try list.toOwnedSlice(allocator);
-}
-
-test "component modules: build compile test (requires -Desp_idf)" {
-    const esp_idf: []const u8 = test_options.esp_idf orelse {
-        std.debug.print("  SKIPPED: -Desp_idf not provided, skipping build compile tests\n", .{});
-        return;
-    };
-
-    const allocator = testing.allocator;
-    const modules = try discoverModuleTestDirs(allocator);
-    defer {
-        for (modules) |m| allocator.free(m);
-        allocator.free(modules);
-    }
-
-    if (modules.len == 0) {
-        std.debug.print("  WARNING: no compile test directories found\n", .{});
-        return;
-    }
-
-    var fail_count: usize = 0;
-    var pass_count: usize = 0;
-
-    for (modules) |mod| {
-        var path_buf: [512]u8 = undefined;
-        const test_dir = std.fmt.bufPrint(&path_buf, "test/compile_test/{s}", .{mod}) catch continue;
-
-        const esp_idf_arg = std.fmt.allocPrint(allocator, "-Desp_idf={s}", .{esp_idf}) catch continue;
-        defer allocator.free(esp_idf_arg);
-
-        const argv = [_][]const u8{
-            test_options.zig_exe_path,
-            "build",
-            "build",
-            esp_idf_arg,
-        };
-
-        std.debug.print("  build: test/compile_test/{s} ...", .{mod});
-
-        const result = std.process.Child.run(.{
-            .allocator = allocator,
-            .argv = &argv,
-            .cwd = test_dir,
-        }) catch |err| {
-            std.debug.print(" EXEC ERROR: {}\n", .{err});
-            fail_count += 1;
-            continue;
-        };
-        defer allocator.free(result.stdout);
-        defer allocator.free(result.stderr);
-
-        const exit_ok = switch (result.term) {
-            .Exited => |code| code == 0,
-            else => false,
-        };
-
-        if (exit_ok) {
-            pass_count += 1;
-            std.debug.print(" OK\n", .{});
-        } else {
-            fail_count += 1;
-            std.debug.print(" FAILED\n", .{});
-            if (result.stderr.len > 0) {
-                const max_len = @min(result.stderr.len, 2048);
-                std.debug.print("--- stderr (test/compile_test/{s}) ---\n{s}\n---\n", .{ mod, result.stderr[0..max_len] });
-            }
-        }
-    }
-
-    std.debug.print("\n  build results: {d} passed, {d} failed out of {d} modules\n", .{ pass_count, fail_count, modules.len });
-    if (fail_count > 0) {
         return error.TestUnexpectedResult;
     }
 }

@@ -28,6 +28,8 @@ pub const IO = struct {
 
     const ChannelEntry = struct {
         queue: freertos_queue.Queue([1]u8),
+        peer_fd: fd_t,
+        owns_queue: bool,
     };
 
     allocator: std.mem.Allocator,
@@ -83,6 +85,7 @@ pub const IO = struct {
         var ch_it = self.channels.iterator();
         while (ch_it.next()) |entry| {
             var e = entry.value_ptr.*;
+            if (!e.owns_queue) continue;
             e.queue.deinit();
         }
         self.channels.deinit();
@@ -141,10 +144,18 @@ pub const IO = struct {
             qq.deinit();
         }
 
-        try self.channels.put(read_fd, .{ .queue = q });
+        try self.channels.put(read_fd, .{
+            .queue = q,
+            .peer_fd = write_fd,
+            .owns_queue = true,
+        });
         errdefer _ = self.channels.remove(read_fd);
 
-        try self.channels.put(write_fd, .{ .queue = q });
+        try self.channels.put(write_fd, .{
+            .queue = q,
+            .peer_fd = read_fd,
+            .owns_queue = false,
+        });
 
         return .{ .read_fd = read_fd, .write_fd = write_fd };
     }
@@ -180,8 +191,21 @@ pub const IO = struct {
 
     pub fn closeChannel(self: *@This(), fd: fd_t) void {
         if (self.channels.fetchRemove(fd)) |kv| {
-            var q = kv.value.queue;
-            q.deinit();
+            const entry = kv.value;
+            _ = self.watchers.remove(fd);
+
+            const peer = self.channels.fetchRemove(entry.peer_fd);
+            if (peer) |peer_kv| {
+                _ = self.watchers.remove(peer_kv.key);
+            }
+
+            if (entry.owns_queue) {
+                var q = entry.queue;
+                q.deinit();
+            } else if (peer) |peer_kv| {
+                var q = peer_kv.value.queue;
+                q.deinit();
+            }
         }
     }
 
@@ -240,3 +264,29 @@ pub const IO = struct {
         return freertos_task.msToTicks(ms, self.tick_rate_hz);
     }
 };
+
+var global_io_storage: ?IO = null;
+var global_io_ref_count: usize = 0;
+
+pub fn acquireGlobal() anyerror!*IO {
+    if (global_io_storage == null) {
+        global_io_storage = try IO.init(std.heap.c_allocator);
+    }
+    global_io_ref_count += 1;
+    return &global_io_storage.?;
+}
+
+pub fn global() ?*IO {
+    if (global_io_storage == null) return null;
+    return &global_io_storage.?;
+}
+
+pub fn releaseGlobal() void {
+    if (global_io_ref_count == 0) return;
+    global_io_ref_count -= 1;
+    if (global_io_ref_count != 0) return;
+    if (global_io_storage) |*io| {
+        io.deinit();
+        global_io_storage = null;
+    }
+}
