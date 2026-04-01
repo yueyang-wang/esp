@@ -28,6 +28,13 @@ pub const partition_table = esp_idf.PartitionTable.make(.{
             .size = 0x200000,
         },
         .{
+            .name = "tmp",
+            .kind = .data,
+            .subtype = .spiffs,
+            .size = 0x40000,
+            .data = esp_idf.PartitionTable.data.spiffs("partitions/spiffs"),
+        },
+        .{
             .name = "coredump",
             .kind = .data,
             .subtype = .{ .custom_name = "coredump" },
