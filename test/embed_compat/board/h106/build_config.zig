@@ -13,7 +13,7 @@ pub const partition_table = esp_idf.PartitionTable.make(.{
         .{ .name = "nvs", .kind = .data, .subtype = .nvs, .size = 0x6000 },
         .{ .name = "otadata", .kind = .data, .subtype = .ota, .size = 0x2000 },
         .{ .name = "phy_init", .kind = .data, .subtype = .phy, .size = 0x1000 },
-        .{ .name = "ota_0", .kind = .app, .subtype = .ota_0, .size = 0x500000 },
+        .{ .name = "ota_0", .kind = .app, .subtype = .ota_0, .offset = 0x20000, .size = 0x500000 },
         .{ .name = "ota_1", .kind = .app, .subtype = .ota_1, .size = 0x500000 },
         .{
             .name = "data_0",
