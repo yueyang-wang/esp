@@ -17,7 +17,7 @@ const max_u64: u64 = ~@as(u64, 0);
 
 pub const Id = usize;
 pub const max_name_len: usize = 15;
-pub const default_stack_size: usize = 16384;
+pub const default_stack_size: usize = 8192;
 
 shared: *Shared,
 
