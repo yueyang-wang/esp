@@ -133,11 +133,12 @@ pub fn addApp(b: *std.Build, app_name: []const u8, opts: AddOptions) Self {
     const combine_binaries = tools.addCombineFlashImageTool(b, opts.context);
     combine_binaries.dependOn(copy_binaries);
 
-    // Fifth stage: flash the combined binary
+    // Fifth stage: flash the combined binary using existing build artifacts.
+    // This does not trigger build-time dependencies; it expects combined.bin
+    // from a prior successful build.
     const flash = blk: {
         if (runtime.port) |port| {
             const step = tools.addFlashCombinedImageTool(b, opts.context, port);
-            step.dependOn(combine_binaries);
             break :blk step;
         }
         break :blk &b.addFail("missing serial port; pass -Dport=<device> for flash/monitor steps").step;
@@ -145,26 +146,23 @@ pub fn addApp(b: *std.Build, app_name: []const u8, opts: AddOptions) Self {
 
     // Sixth stage: monitor the serial output
 
-    // before monitoring, we need to restore the elf file to the expected path
-    const restore_elf = tools.addRestoreMonitorElfTool(b, opts.context, app_name);
-    restore_elf.dependOn(sdkconfig_configure);
-
-    // monitor the serial output without flashing
+    // monitor the serial output without flashing or triggering build-time
+    // dependencies. This expects the staged project and ELF from a prior build
+    // to already exist.
     const monitor = blk: {
         if (runtime.port) |port| {
             const step = tools.addMonitorTool(b, opts.context, port, runtime.timeout);
-            step.dependOn(restore_elf);
             break :blk step;
         }
         break :blk &b.addFail("missing serial port; pass -Dport=<device> for flash/monitor steps").step;
     };
 
-    // monitor the serial output after flashing
+    // monitor the serial output after flashing, reusing existing build
+    // artifacts without triggering compilation.
     const flash_monitor = blk: {
         if (runtime.port) |port| {
             const step = tools.addMonitorTool(b, opts.context, port, runtime.timeout);
             step.dependOn(flash);
-            step.dependOn(restore_elf);
             break :blk step;
         }
         break :blk &b.addFail("missing serial port; pass -Dport=<device> for flash/monitor steps").step;

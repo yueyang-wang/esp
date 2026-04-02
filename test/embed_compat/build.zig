@@ -372,13 +372,13 @@ fn registerAppSteps(b: *std.Build, app: esp.idf.App) void {
     build_step.dependOn(app.elf_layout);
     b.default_step = build_step;
 
-    const flash_step = b.step("flash", "Flash the ESP firmware");
+    const flash_step = b.step("flash", "Flash firmware using existing build artifacts");
     flash_step.dependOn(app.flash);
 
-    const monitor_step = b.step("monitor", "Monitor the ESP serial output without flashing");
+    const monitor_step = b.step("monitor", "Monitor serial output using existing build artifacts");
     monitor_step.dependOn(app.monitor);
 
-    const flash_monitor_step = b.step("flash_monitor", "Flash the ESP firmware, then monitor serial output");
+    const flash_monitor_step = b.step("flash_monitor", "Flash then monitor using existing build artifacts");
     flash_monitor_step.dependOn(app.flash_monitor);
 }
 
