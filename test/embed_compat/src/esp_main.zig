@@ -12,6 +12,18 @@ const app_log = std.log.scoped(.embed_compat);
 extern fn esp_vfs_spiffs_register(conf: *const SpiffsConf) callconv(.c) i32;
 extern fn esp_vfs_spiffs_unregister(partition_label: ?[*:0]const u8) callconv(.c) i32;
 extern fn espz_test_wifi_connect(ssid: [*:0]const u8, password: [*:0]const u8, timeout_ms: i32) callconv(.c) i32;
+extern fn espz_log_panic(msg: [*]const u8, len: usize) callconv(.c) void;
+
+pub fn panic(
+    msg: []const u8,
+    _: ?*@import("std").builtin.StackTrace,
+    _: ?usize,
+) noreturn {
+    espz_log_panic(msg.ptr, msg.len);
+    while (true) {
+        @breakpoint();
+    }
+}
 
 const SpiffsConf = extern struct {
     base_path: ?[*:0]const u8,
