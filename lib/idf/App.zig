@@ -144,7 +144,7 @@ pub fn addApp(b: *std.Build, app_name: []const u8, opts: AddOptions) Self {
 
     // Sixth stage: monitor the serial output
 
-    //before monitoring, we need to restore the elf file to the expected path
+    // before monitoring, we need to restore the elf file to the expected path
     // monitor the serial output without flashing
     const monitor = blk: {
         if (runtime.port) |port| {
@@ -154,8 +154,7 @@ pub fn addApp(b: *std.Build, app_name: []const u8, opts: AddOptions) Self {
         break :blk &b.addFail("missing serial port; pass -Dport=<device> for flash/monitor steps").step;
     };
 
-    // monitor the serial output after flashing, reusing existing build
-    // artifacts without triggering compilation.
+    // monitor the serial output after flashing
     const flash_monitor = blk: {
         if (runtime.port) |port| {
             const step = tools.addMonitorTool(b, opts.context, port, runtime.timeout);
