@@ -133,9 +133,7 @@ pub fn addApp(b: *std.Build, app_name: []const u8, opts: AddOptions) Self {
     const combine_binaries = tools.addCombineFlashImageTool(b, opts.context);
     combine_binaries.dependOn(copy_binaries);
 
-    // Fifth stage: flash the combined binary using existing build artifacts.
-    // This does not trigger build-time dependencies; it expects combined.bin
-    // from a prior successful build.
+    // Fifth stage: flash the combined binary
     const flash = blk: {
         if (runtime.port) |port| {
             const step = tools.addFlashCombinedImageTool(b, opts.context, port);
@@ -146,9 +144,8 @@ pub fn addApp(b: *std.Build, app_name: []const u8, opts: AddOptions) Self {
 
     // Sixth stage: monitor the serial output
 
-    // monitor the serial output without flashing or triggering build-time
-    // dependencies. This expects the staged project and ELF from a prior build
-    // to already exist.
+    //before monitoring, we need to restore the elf file to the expected path
+    // monitor the serial output without flashing
     const monitor = blk: {
         if (runtime.port) |port| {
             const step = tools.addMonitorTool(b, opts.context, port, runtime.timeout);
