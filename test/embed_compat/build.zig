@@ -356,7 +356,7 @@ fn createEspMainHelperComponent(b: *std.Build) *Component {
     });
     component.addCSourceFiles(.{
         .root = b.path("esp_main_helper"),
-        .files = &.{ "wifi.c"},
+        .files = &.{"wifi.c"},
     });
     component.addRequire("esp_event");
     component.addRequire("esp_netif");
@@ -372,13 +372,13 @@ fn registerAppSteps(b: *std.Build, app: esp.idf.App) void {
     build_step.dependOn(app.elf_layout);
     b.default_step = build_step;
 
-    const flash_step = b.step("flash", "Flash firmware using existing build artifacts");
+    const flash_step = b.step("flash", "Flash the ESP firmware");
     flash_step.dependOn(app.flash);
 
-    const monitor_step = b.step("monitor", "Monitor serial output using existing build artifacts");
+    const monitor_step = b.step("monitor", "Monitor the ESP serial output without flashing");
     monitor_step.dependOn(app.monitor);
 
-    const flash_monitor_step = b.step("flash_monitor", "Flash then monitor using existing build artifacts");
+    const flash_monitor_step = b.step("flash_monitor", "Flash the ESP firmware, then monitor serial output");
     flash_monitor_step.dependOn(app.flash_monitor);
 }
 
