@@ -356,7 +356,7 @@ fn createEspMainHelperComponent(b: *std.Build) *Component {
     });
     component.addCSourceFiles(.{
         .root = b.path("esp_main_helper"),
-        .files = &.{ "wifi.c", "panic.c" },
+        .files = &.{ "wifi.c"},
     });
     component.addRequire("esp_event");
     component.addRequire("esp_netif");
