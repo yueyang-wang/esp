@@ -63,7 +63,8 @@ const EspPlatform = struct {
 };
 
 export fn zig_esp_main() callconv(.c) void {
-    test_runner.run(EspPlatform) catch |err| {
+    const stack_size: usize = 16384;
+    test_runner.run(EspPlatform, stack_size) catch |err| {
         app_log.err("embed-zig test runners failed: {}", .{err});
         @panic("embed-zig test runners failed");
     };
