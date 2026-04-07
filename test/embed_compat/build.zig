@@ -22,7 +22,8 @@ const EmbedZigImports = struct {
     net: *Module,
     sync: *Module,
     embed_std: *Module,
-    integration: *Module,
+    embed_test: *Module,
+    context_test: *Module,
     testing: *Module,
     ogg: *Module,
     ogg_artifact: *Compile,
@@ -159,15 +160,37 @@ fn importEmbedZig(
         .stb_truetype = true,
     });
 
+    const embed = dep.module("embed");
+    const context = dep.module("context");
+    const testing_mod = dep.module("testing");
+
     return .{
         .dep = dep,
-        .embed = dep.module("embed"),
-        .context = dep.module("context"),
+        .embed = embed,
+        .context = context,
         .net = dep.module("net"),
         .sync = dep.module("sync"),
         .embed_std = dep.module("embed_std"),
-        .integration = dep.module("integration"),
-        .testing = dep.module("testing"),
+        .embed_test = b.createModule(.{
+            .root_source_file = dep.path("lib/test/embed.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "embed", .module = embed },
+                .{ .name = "testing", .module = testing_mod },
+            },
+        }),
+        .context_test = b.createModule(.{
+            .root_source_file = dep.path("lib/test/context.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "context", .module = context },
+                .{ .name = "embed", .module = embed },
+                .{ .name = "testing", .module = testing_mod },
+            },
+        }),
+        .testing = testing_mod,
         .ogg = dep.module("ogg"),
         .ogg_artifact = dep.artifact("ogg"),
         .opus = dep.module("opus"),
@@ -230,7 +253,8 @@ fn createNativeTestModule(
         .imports = &.{
             .{ .name = "embed", .module = embed_native.embed },
             .{ .name = "embed_std", .module = embed_native.embed_std },
-            .{ .name = "integration", .module = embed_native.integration },
+            .{ .name = "embed_test", .module = embed_native.embed_test },
+            .{ .name = "context_test", .module = embed_native.context_test },
             .{ .name = "context", .module = embed_native.context },
             .{ .name = "lvgl", .module = embed_native.lvgl },
             .{ .name = "net", .module = embed_native.net },
@@ -258,7 +282,8 @@ fn createAppRootModule(
         .imports = &.{
             .{ .name = "app_options", .module = app_options_module },
             .{ .name = "esp_embed", .module = esp_embed_module },
-            .{ .name = "integration", .module = embed_esp.integration },
+            .{ .name = "embed_test", .module = embed_esp.embed_test },
+            .{ .name = "context_test", .module = embed_esp.context_test },
             .{ .name = "ogg", .module = embed_esp.ogg },
             .{ .name = "opus", .module = embed_esp.opus },
             .{ .name = "lvgl", .module = embed_esp.lvgl },

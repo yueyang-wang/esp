@@ -1,6 +1,5 @@
 const app_options = @import("app_options");
 const esp_embed = @import("esp_embed");
-const integration_mod = @import("integration");
 const test_runner = @import("test_runner.zig");
 const testing_mod = @import("testing");
 
@@ -30,7 +29,6 @@ const wifi_password = app_options.wifi_password;
 const EspPlatform = struct {
     pub const std = esp_embed.std;
     pub const Channel = esp_embed.sync.Channel;
-    pub const integration = integration_mod;
     pub const net = esp_embed.net;
     pub const sync = esp_embed.sync;
     pub const testing_api = testing_mod;

@@ -84,6 +84,14 @@ pub fn Channel(comptime T: type) type {
                 self.recvBuffered();
         }
 
+        pub fn recvTimeout(self: *Self, timeout_ms: u32) anyerror!RecvResult(T) {
+            const timeout_ticks = msToTicks(timeout_ms);
+            return if (self.capacity == 0)
+                self.recvUnbufferedTimeout(timeout_ticks)
+            else
+                self.recvBufferedTimeout(timeout_ticks);
+        }
+
         fn sendBuffered(self: *Self, value: T) SendResult() {
             var item = value;
             while (true) {
@@ -131,6 +139,55 @@ pub fn Channel(comptime T: type) type {
                 if (self.isClosed() and binding.espz_queue_messages_waiting(self.queue) == 0) {
                     return .{ .ok = false };
                 }
+            }
+        }
+
+        fn recvBufferedTimeout(self: *Self, timeout_ticks: u32) RecvResult(T) {
+            var remaining: u32 = timeout_ticks;
+            while (true) {
+                var item: T = undefined;
+                const wait = @min(poll_ticks, remaining);
+                if (binding.espz_queue_receive(self.queue, @ptrCast(&item), wait) == pd_true) {
+                    return .{ .value = item, .ok = true };
+                }
+                if (self.isClosedAndEmpty()) {
+                    return .{ .value = undefined, .ok = false };
+                }
+                if (remaining <= poll_ticks) {
+                    return .{ .value = undefined, .ok = false };
+                }
+                remaining -= poll_ticks;
+            }
+        }
+
+        fn recvUnbufferedTimeout(self: *Self, timeout_ticks: u32) RecvResult(T) {
+            var remaining: u32 = timeout_ticks;
+            while (true) {
+                self.lock();
+                self.recv_waiters += 1;
+                self.unlock();
+
+                var item: T = undefined;
+                const wait = @min(poll_ticks, remaining);
+                const received = binding.espz_queue_receive(self.queue, @ptrCast(&item), wait) == pd_true;
+
+                self.lock();
+                if (self.recv_waiters != 0) self.recv_waiters -= 1;
+                const closed = self.closed;
+                const empty = binding.espz_queue_messages_waiting(self.queue) == 0;
+                self.unlock();
+
+                if (received) {
+                    _ = binding.espz_semaphore_give(self.ack);
+                    return .{ .value = item, .ok = true };
+                }
+                if (closed and empty) {
+                    return .{ .value = undefined, .ok = false };
+                }
+                if (remaining <= poll_ticks) {
+                    return .{ .value = undefined, .ok = false };
+                }
+                remaining -= poll_ticks;
             }
         }
 
@@ -185,6 +242,13 @@ pub fn Channel(comptime T: type) type {
             _ = binding.espz_semaphore_give(self.state_lock);
         }
     };
+}
+
+fn msToTicks(ms: u32) u32 {
+    const hz: u64 = binding.espz_freertos_tick_rate_hz();
+    if (hz == 0) return ms;
+    const ticks = ((@as(u64, ms) * hz) + 999) / 1000;
+    return @intCast(@min(ticks, @as(u64, embed.math.maxInt(u32))));
 }
 
 fn lockSemaphore(handle: Handle) void {
