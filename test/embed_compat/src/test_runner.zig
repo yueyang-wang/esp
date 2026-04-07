@@ -6,7 +6,7 @@ const opus = @import("opus");
 const stb_truetype = @import("stb_truetype");
 const testing = @import("testing");
 
-pub fn run(comptime lib: type, stack_size: usize) !void {
+pub fn run(comptime lib: type) !void {
     const rtstd = lib.std;
     const app_log = rtstd.log.scoped(.embed_compat);
 
@@ -21,14 +21,14 @@ pub fn run(comptime lib: type, stack_size: usize) !void {
     runner.parallel();
     runner.timeout(240 * rtstd.time.ns_per_s);
 
-    runner.run("embed/unit", withStackSize(embed_test.make(rtstd), stack_size));
-    runner.run("context/unit", withStackSize(context_test.make(rtstd), stack_size));
-    runner.run("sync/integration", withStackSize(lib.sync.test_runner.integration.make(rtstd, lib.Channel), stack_size));
-    runner.run("net/integration", withStackSize(lib.net.test_runner.integration.make(rtstd), stack_size));
-    runner.run("lvgl", withStackSize(lvgl.test_runner.lvgl.make(rtstd), stack_size));
-    runner.run("stb_truetype", withStackSize(stb_truetype.test_runner.stb_truetype.make(rtstd), stack_size));
-    runner.run("ogg", withStackSize(ogg.test_runner.ogg.make(rtstd), stack_size));
-    runner.run("opus", withStackSize(opus.test_runner.opus.make(rtstd), stack_size));
+    runner.run("embed/unit", embed_test.make(rtstd));
+    runner.run("context/unit", context_test.make(rtstd));
+    runner.run("sync/integration", lib.sync.test_runner.integration.make(rtstd, lib.Channel));
+    runner.run("net/integration", lib.net.test_runner.integration.make(rtstd));
+    runner.run("lvgl", lvgl.test_runner.lvgl.make(rtstd));
+    runner.run("stb_truetype", stb_truetype.test_runner.stb_truetype.make(rtstd));
+    runner.run("ogg", ogg.test_runner.ogg.make(rtstd));
+    runner.run("opus", opus.test_runner.opus.make(rtstd));
 
     const passed = runner.wait();
     app_log.info("embed-zig test runners finished", .{});
