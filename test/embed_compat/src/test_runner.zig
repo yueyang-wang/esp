@@ -7,14 +7,6 @@ const stb_truetype = @import("stb_truetype");
 const testing = @import("testing");
 
 pub fn run(comptime lib: type, stack_size: usize) !void {
-    const withStackSize = struct {
-        fn apply(tr: testing.TestRunner, requested_stack_size: usize) testing.TestRunner {
-            var r = tr;
-            r.spawn_config = .{ .stack_size = requested_stack_size };
-            return r;
-        }
-    }.apply;
-
     const rtstd = lib.std;
     const app_log = rtstd.log.scoped(.embed_compat);
 
