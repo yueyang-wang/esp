@@ -40,10 +40,6 @@ pub const random = embed.Random.init(&random_state, RandomState.fill);
 pub const Ed25519 = struct {
     pub const noise_length: usize = 32;
 
-    pub fn isAvailable() bool {
-        return binding.espz_mbedtls_has_ed25519;
-    }
-
     pub const Signature = struct {
         pub const encoded_length: usize = 64;
 
@@ -143,10 +139,6 @@ pub const X25519 = struct {
     pub const public_length: usize = 32;
     pub const shared_length: usize = 32;
     pub const seed_length: usize = 32;
-
-    pub fn isAvailable() bool {
-        return binding.espz_mbedtls_has_x25519;
-    }
 
     pub const KeyPair = struct {
         secret_key: [secret_length]u8,
@@ -522,16 +514,45 @@ pub fn Hmac(comptime Hash: type) type {
 }
 
 pub fn Hkdf(comptime HmacType: type) type {
-    return zig_std.crypto.kdf.hkdf.Hkdf(HmacType);
+    return struct {
+        pub const prk_length: usize = HmacType.mac_length;
+
+        pub fn extract(salt: []const u8, ikm: []const u8) [prk_length]u8 {
+            var prk: [prk_length]u8 = undefined;
+            HmacType.create(&prk, ikm, salt);
+            return prk;
+        }
+
+        pub fn expand(out: []u8, ctx: []const u8, prk: [prk_length]u8) void {
+            embed.debug.assert(out.len <= 255 * prk_length);
+
+            var offset: usize = 0;
+            var block: [prk_length]u8 = undefined;
+            var block_len: usize = 0;
+            var counter: u8 = 1;
+
+            while (offset < out.len) : (counter += 1) {
+                var mac = HmacType.init(&prk);
+                if (block_len != 0) mac.update(block[0..block_len]);
+                mac.update(ctx);
+                mac.update(&[_]u8{counter});
+                mac.final(&block);
+                block_len = block.len;
+
+                const remaining = out.len - offset;
+                const chunk_len = @min(remaining, block.len);
+                @memcpy(out[offset .. offset + chunk_len], block[0..chunk_len]);
+                offset += chunk_len;
+            }
+        }
+    };
 }
 
 fn HashImpl(
     comptime digest_length_: usize,
     comptime block_length_: usize,
     comptime Context: type,
-    comptime c_sizeof: *const usize,
     comptime initFn: fn (*Context) callconv(.c) void,
-    comptime cloneFn: fn (*Context, *const Context) callconv(.c) void,
     comptime updateFn: fn (*Context, [*]const u8, usize) callconv(.c) void,
     comptime finalFn: fn (*Context, *[digest_length_]u8) callconv(.c) void,
 ) type {
@@ -551,8 +572,6 @@ fn HashImpl(
         }
 
         pub fn init(_: Options) Self {
-            if (@sizeOf(Context) < c_sizeof.*)
-                @panic("mbedTLS SHA context opaque storage too small");
             var self: Self = undefined;
             initFn(&self.ctx);
             return self;
@@ -574,8 +593,7 @@ fn HashImpl(
         }
 
         pub fn peek(self: Self) [digest_length]u8 {
-            var copy = Self.init(.{});
-            cloneFn(&copy.ctx, &self.ctx);
+            var copy = self;
             return copy.finalResult();
         }
     };
@@ -585,9 +603,7 @@ const Hash256 = HashImpl(
     32,
     64,
     binding.sha256_context,
-    &binding.espz_mbedtls_sizeof_sha256_context,
     binding.espz_mbedtls_sha256_init,
-    binding.espz_mbedtls_sha256_clone,
     binding.espz_mbedtls_sha256_update,
     binding.espz_mbedtls_sha256_final,
 );
@@ -596,9 +612,7 @@ const Hash384 = HashImpl(
     48,
     128,
     binding.sha512_context,
-    &binding.espz_mbedtls_sizeof_sha512_context,
     binding.espz_mbedtls_sha384_init,
-    binding.espz_mbedtls_sha384_clone,
     binding.espz_mbedtls_sha384_update,
     binding.espz_mbedtls_sha384_final,
 );
@@ -607,9 +621,7 @@ const Hash512 = HashImpl(
     64,
     128,
     binding.sha512_context,
-    &binding.espz_mbedtls_sizeof_sha512_context,
     binding.espz_mbedtls_sha512_init,
-    binding.espz_mbedtls_sha512_clone,
     binding.espz_mbedtls_sha512_update,
     binding.espz_mbedtls_sha512_final,
 );
@@ -668,10 +680,6 @@ const ChaCha20Poly1305Impl = struct {
     pub const tag_length: usize = 16;
     pub const nonce_length: usize = 12;
     pub const key_length: usize = 32;
-
-    pub fn isAvailable() bool {
-        return binding.espz_mbedtls_has_chacha20poly1305;
-    }
 
     pub fn encrypt(c: []u8, tag: *[tag_length]u8, m: []const u8, ad: []const u8, npub: [nonce_length]u8, key: [key_length]u8) void {
         if (!binding.espz_mbedtls_has_chacha20poly1305)

@@ -396,9 +396,6 @@ static int rsa_verify_common(
     return rc;
 }
 
-const size_t espz_mbedtls_sizeof_sha256_context = sizeof(mbedtls_sha256_context);
-const size_t espz_mbedtls_sizeof_sha512_context = sizeof(mbedtls_sha512_context);
-
 void espz_mbedtls_sha256_init(mbedtls_sha256_context *ctx) {
     mbedtls_sha256_init(ctx);
     (void) mbedtls_sha256_starts(ctx, 0);

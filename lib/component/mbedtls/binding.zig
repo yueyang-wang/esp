@@ -1,25 +1,16 @@
-// Opaque storage for mbedTLS SHA contexts.
-//
-// ESP-IDF switches between the vanilla mbedTLS layouts and ESP-specific ALT
-// layouts when hardware SHA is enabled. Zig never reads these fields directly;
-// it only passes pointers through the C wrappers, so using opaque storage
-// avoids layout drift across configurations.
-//
-// The storage is intentionally oversized (256 / 512 bytes) to accommodate any
-// ESP target or configuration. Use the `espz_mbedtls_sizeof_sha*_context`
-// externs to verify at runtime.
 pub const sha256_context = extern struct {
-    _align: u32 = 0,
-    _storage: [252]u8 = [_]u8{0} ** 252,
+    buffer: [64]u8,
+    total: [2]u32,
+    state: [8]u32,
+    is224: c_int,
 };
 
 pub const sha512_context = extern struct {
-    _align: u64 = 0,
-    _storage: [504]u8 = [_]u8{0} ** 504,
+    total: [2]u64,
+    state: [8]u64,
+    buffer: [128]u8,
+    is384: c_int,
 };
-
-pub extern const espz_mbedtls_sizeof_sha256_context: usize;
-pub extern const espz_mbedtls_sizeof_sha512_context: usize;
 
 pub const aes_context = extern struct {
     nr: c_int,
